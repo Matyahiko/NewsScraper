@@ -1,0 +1,5 @@
+.env
+raw_data/
+RSS.json
+cron.log
+news_scraper.log
