@@ -4,49 +4,76 @@ import time
 import random
 import logging
 import requests
+from typing import List, Dict, Any
+from dataclasses import dataclass
 from pypdf import PdfReader
 from tqdm import tqdm
 
-# ログの設定
-logging.basicConfig(filename="/root/src/log/download.log", level=logging.INFO)
+# Constants
+CONFIG_FILE = "/root/src/config.json"
+LOG_FILE = "/root/src/log/download.log"
+EXTRACTED_DATA_FILE = "/root/src/log/extracted_data.json"
+FAILED_DOWNLOADS_FILE = "/root/src/log/failed_downloads.json"
+PDF_DIRECTORY = "/root/src/raw_data/timely-disclosure"
+
+@dataclass
+class Config:
+    max_retries: int
+    download_delay: tuple[int, int]
+    url_template: str
+
+def load_config() -> Config:
+    with open(CONFIG_FILE, 'r') as f:
+        config_data = json.load(f)
+    return Config(**config_data)
+
+def setup_logging():
+    logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
 
 class TdnetDownloader:
-    def __init__(self, max_retries=5):
-        self.max_retries = max_retries
+    def __init__(self, config: Config):
+        self.config = config
 
-    def fetch_data(self, url):
-        """指定されたURLからデータを取得する"""
+    def fetch_data(self, url: str) -> List[Dict[str, Any]]:
+        """Fetch data from the specified URL"""
         response = requests.get(url)
-        data = json.loads(response.content)
+        response.raise_for_status()
+        data = response.json()
         return [item["Tdnet"] for item in data["items"]]
 
-    def extract_info(self, data):
-        """取得したデータから必要な情報を抽出する"""
+    def extract_info(self, data: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """Extract necessary information from fetched data"""
         return [
             {
                 "pubdate": item["pubdate"],
                 "company_code": item["company_code"],
                 "document_url": item["document_url"][len("https://webapi.yanoshin.jp/rd.php?"):]
-            } for item in data]
+            } for item in data
+        ]
 
-    def save_data(self, data, file_path):
-        """データをJSONファイルに保存する"""
+    @staticmethod
+    def save_data(data: Any, file_path: str):
+        """Save data to a JSON file"""
         with open(file_path, "w") as f:
             json.dump(data, f, indent=4)
 
-    def download_pdf(self, url):
-        """指定されたURLからPDFファイルをダウンロードする"""
+    def download_pdf(self, url: str) -> bytes:
+        """Download PDF file from the specified URL"""
         response = requests.get(url)
-        time.sleep(random.randint(6, 15))  # ダウンロードの間隔を設定
+        response.raise_for_status()
+        time.sleep(random.randint(*self.config.download_delay))
         return response.content
 
-    def save_pdf(self, content, file_path):
-        """ダウンロードしたPDFファイルを保存する"""
+    @staticmethod
+    def save_pdf(content: bytes, file_path: str):
+        """Save downloaded PDF file"""
         with open(file_path, "wb") as f:
             f.write(content)
 
-    def validate_pdf(self, file_path):
-        """PDFファイルが正しいかを検証する"""
+    @staticmethod
+    def validate_pdf(file_path: str) -> bool:
+        """Validate if the PDF file is correct"""
         try:
             with open(file_path, "rb") as f:
                 pdf = PdfReader(f)
@@ -55,59 +82,65 @@ class TdnetDownloader:
             logging.error(f"Error validating PDF at {file_path}: {e}")
             return False
 
-    def process_downloads(self, data):
-        """PDFファイルのダウンロードと保存を処理する"""
-        total = len(data)
-        progress_bar = tqdm(total=total, desc="Downloading PDFs", unit="file")
+    def process_downloads(self, data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """Process PDF downloads and saves"""
         failed_downloads = []
-
-        for item in data:
-            if item["company_code"][-1] == "0":
-                retries = 0
-                success = False
-
-                while retries < self.max_retries and not success:
-                    try:
-                        pdf_content = self.download_pdf(item["document_url"])
-                        date = item["pubdate"].split(" ")[0]
-                        file_name = f"{date}_{item['company_code']}.pdf"
-                        file_path = f"/root/src/raw_data/timely-disclosure/{file_name}"
-
-                        self.save_pdf(pdf_content, file_path)
-
-                        if self.validate_pdf(file_path):
-                            success = True
-                            progress_bar.update(1)
-                            logging.info(f"Downloaded {file_path}.")
-                        else:
-                            retries += 1
-                            os.remove(file_path)  # 壊れたファイルを削除
-                            logging.warning(f"Failed to validate {file_path}. Retrying download.")
-
-                    except Exception as e:
-                        logging.error(f"Failed to download {item['document_url']}: {e}")
-                        retries += 1
-
-                if not success:
-                    failed_downloads.append(item)
-
-        progress_bar.close()
+        with tqdm(total=len(data), desc="Downloading PDFs", unit="file") as progress_bar:
+            for item in data:
+                if item["company_code"][-1] == "0":
+                    if self.download_single_pdf(item):
+                        progress_bar.update(1)
+                    else:
+                        failed_downloads.append(item)
         return failed_downloads
 
-    def retry_failed_downloads(self, failed_downloads):
-        """ダウンロードに失敗したファイルを再度ダウンロードする"""
+    def download_single_pdf(self, item: Dict[str, str]) -> bool:
+        """Download a single PDF file"""
+        for _ in range(self.config.max_retries):
+            try:
+                pdf_content = self.download_pdf(item["document_url"])
+                date = item["pubdate"].split(" ")[0]
+                file_name = f"{date}_{item['company_code']}.pdf"
+                file_path = os.path.join(PDF_DIRECTORY, file_name)
+
+                self.save_pdf(pdf_content, file_path)
+
+                if self.validate_pdf(file_path):
+                    logging.info(f"Downloaded {file_path}.")
+                    return True
+                else:
+                    os.remove(file_path)
+                    logging.warning(f"Failed to validate {file_path}. Retrying download.")
+            except Exception as e:
+                logging.error(f"Failed to download {item['document_url']}: {e}")
+        return False
+
+    def retry_failed_downloads(self, failed_downloads: List[Dict[str, str]]):
+        """Retry downloading failed files"""
         if not failed_downloads:
             logging.info("No failed downloads to retry.")
             return
 
-        self.save_data(failed_downloads, "/root/src/log/path_to_failed_downloads.json")
+        self.save_data(failed_downloads, FAILED_DOWNLOADS_FILE)
         self.process_downloads(failed_downloads)
 
-    def run(self, mode="today"):
+    def run(self, mode: str = "today"):
         """
-        TDnetからデータを取得し、PDFファイルをダウンロードする
-        mode: "today" - 今日の日付だけダウンロード, "month" - 過去一か月分をダウンロード
+        Fetch data from TDnet and download PDF files
+        mode: "today" - download only today's data, "month" - download last month's data
         """
+        start_date, end_date = self.get_date_range(mode)
+        url = self.config.url_template.format(start_date=start_date, end_date=end_date)
+        
+        data = self.fetch_data(url)
+        extracted_data = self.extract_info(data)
+        self.save_data(extracted_data, EXTRACTED_DATA_FILE)
+        failed_downloads = self.process_downloads(extracted_data)
+        self.retry_failed_downloads(failed_downloads)
+
+    @staticmethod
+    def get_date_range(mode: str) -> tuple[str, str]:
+        """Get date range based on the specified mode"""
         if mode == "today":
             start_date = end_date = time.strftime("%Y%m%d")
         elif mode == "month":
@@ -115,14 +148,10 @@ class TdnetDownloader:
             start_date = time.strftime("%Y%m%d", time.localtime(time.time() - 60 * 60 * 24 * 30))
         else:
             raise ValueError("Invalid mode. Choose either 'today' or 'month'.")
-
-        url = f"https://webapi.yanoshin.jp/webapi/tdnet/list/{start_date}-{end_date}.json?limit=10000"
-        data = self.fetch_data(url)
-        extracted_data = self.extract_info(data)
-        self.save_data(extracted_data, "/root/src/log/path_to_extracted_data.json")
-        failed_downloads = self.process_downloads(extracted_data)
-        self.retry_failed_downloads(failed_downloads)
+        return start_date, end_date
 
 if __name__ == "__main__":
-    downloader = TdnetDownloader(max_retries=5)
+    setup_logging()
+    config = load_config()
+    downloader = TdnetDownloader(config)
     downloader.run()

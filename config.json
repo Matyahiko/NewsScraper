@@ -1,0 +1,5 @@
+{
+    "max_retries": 5,
+    "download_delay": [6, 15],
+    "url_template": "https://webapi.yanoshin.jp/webapi/tdnet/list/{start_date}-{end_date}.json?limit=10000"
+}
