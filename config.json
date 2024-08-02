@@ -1,5 +1,10 @@
 {
-    "max_retries": 5,
-    "download_delay": [6, 15],
-    "url_template": "https://webapi.yanoshin.jp/webapi/tdnet/list/{start_date}-{end_date}.json?limit=10000"
+    "max_retries": 3,
+    "download_delay": [1, 3],
+    "url_template": "https://webapi.yanoshin.jp/webapi/tdnet/list/{start_date}/{end_date}.json",
+    "config_file": "/path/to/config.json",
+    "log_file": "/path/to/log/download.log",
+    "extracted_data_file": "/path/to/log/extracted_data.json",
+    "failed_downloads_file": "/path/to/log/failed_downloads.json",
+    "pdf_directory": "/path/to/raw_data/timely-disclosure"
 }
