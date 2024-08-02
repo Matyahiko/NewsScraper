@@ -3,7 +3,7 @@
 ## 概要
 
 News Scraperは、指定されたRSSフィードから記事を自動的に収集し、保存するPythonスクリプトです。
-適時開示に対応予定。
+適時開示も対応。
 
 ## 主な機能
 
@@ -56,7 +56,7 @@ pip install -r requirements.txt
 2. スクリプトを実行します。
 
 ```
-python news_scraper.py
+python3 news_scraper.py
 ```
 
 3. スクレイピングされた記事は`raw_data/news/[ソース名]/[年-月]/[記事ID].json`に保存されます。
