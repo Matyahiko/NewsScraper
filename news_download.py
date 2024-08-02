@@ -17,7 +17,7 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 
 # ログ設定
 logging.basicConfig(
-    filename=SCRIPT_DIR / 'news_scraper.log',
+    filename=SCRIPT_DIR / 'log/news_scraper.log',
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )

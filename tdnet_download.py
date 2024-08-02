@@ -10,11 +10,11 @@ from pypdf import PdfReader
 from tqdm import tqdm
 
 # Constants
-CONFIG_FILE = "/root/src/config.json"
-LOG_FILE = "/root/src/log/download.log"
-EXTRACTED_DATA_FILE = "/root/src/log/extracted_data.json"
-FAILED_DOWNLOADS_FILE = "/root/src/log/failed_downloads.json"
-PDF_DIRECTORY = "/root/src/raw_data/timely-disclosure"
+CONFIG_FILE = "/home/higa/downloader/config.json"
+LOG_FILE = "/home/higa/downloader/log/download.log"
+EXTRACTED_DATA_FILE = "/home/higa/downloader/log/extracted_data.json"
+FAILED_DOWNLOADS_FILE = "/home/higa/downloader/log/failed_downloads.json"
+PDF_DIRECTORY = "/home/higa/downloader/raw_data/timely-disclosure"
 
 @dataclass
 class Config:
