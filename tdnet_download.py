@@ -20,7 +20,7 @@ class Config:
     failed_downloads_file: str
     pdf_directory: str
 
-def load_config(config_path: str = "config.json") -> Config:
+def load_config(config_path: str = "/home/higa/downloader/config.json") -> Config:
     """設定ファイルを読み込む"""
     with open(config_path, 'r') as f:
         config_data = json.load(f)
