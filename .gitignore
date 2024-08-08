@@ -1,5 +1,6 @@
 .env
 raw_data/
 RSS.json
+config.json
 log/
 
